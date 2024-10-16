@@ -14,6 +14,7 @@ library(tidyverse)
 ```{r}
 data_q2_1_df = 
   read_csv("data/nhanes_accel.csv") |> 
+  janitor::clean_names() |> 
   pivot_longer(
     cols = starts_with("min"),
     names_to = "time_minutes",
@@ -21,12 +22,14 @@ data_q2_1_df =
   separate(col = time_minutes,
            into = c("min","time_minutes"),
            sep = "min") |> 
-  select(-min)
+  select(-min) |> 
+  mutate(time_minutes = as.numeric(time_minutes))
 ```
 
 ```{r}
 data_q2_2_df = 
   read_csv("data/nhanes_covar.csv",skip = 4) |> 
+  janitor::clean_names() |> 
   mutate(
     sex = factor(case_match(sex,
                      1 ~ "male",
@@ -40,26 +43,174 @@ data_q2_2_df =
   drop_na()
 ```
 
+# Female and Male
 
+```{r}
+data_q2_df = left_join(data_q2_2_df,data_q2_1_df,by = "seqn")
 
+data_summary_q2 = 
+  data_q2_2_df |>
+  group_by(sex) |> 
+  summarize(numbers = n()) |> 
+  as_tibble()
 
-
-## R Markdown
-
-This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
-
-When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
-
-```{r cars}
-summary(cars)
+ data_summary_q2 |> 
+   knitr::kable(
+    caption = "Number of Individuals",
+    col.names = c("Sex", "Number"),
+    format = "html",
+    align = c("l", "c"))
 ```
 
-## Including Plots
 
-You can also embed plots, for example:
-
-```{r pressure, echo=FALSE}
-plot(pressure)
+```{r}
+ggplot(data_summary_q2, 
+       aes(y = numbers, x = sex)) +
+  geom_bar(stat = "identity") +
+  labs(
+    title = "Number of Individuals by Sex",
+    x = "Sex",
+    y = "Number of Individuals") +
+  theme_classic() 
 ```
 
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+
+```{r}
+data_q2_summary2 = 
+  data_q2_df |> 
+  group_by(seqn, sex, age, bmi, education) |> 
+  summarize(activity_level = sum(values), .groups = "drop")
+
+ggplot(data_q2_summary2, aes(x = age, y = activity_level, color = sex)) +
+  geom_point(alpha = 0.6) +  
+  geom_smooth(method = "loess", se = FALSE) +  
+  facet_wrap(~ education) +  
+  labs(
+    title = "Total Activity vs. Age by Sex and Education",
+    x = "Age",
+    y = "Total Activity",
+    color = "Sex"
+  ) +
+  theme_minimal()
+```
+
+
+```{r}
+ggplot(data_q2_df, aes(x = time_minutes, y = values, color = sex)) +
+  geom_line(alpha = 0.4) +  
+  geom_smooth(method = "loess", se = FALSE, linetype = "dashed", size = 1) +
+  facet_wrap(~ education, scales = "free_y") +  
+  labs(
+    title = "24-Hour Activity Time Course by Education Level",
+    x = "Minutes of the Day",
+    y = "Activity Level",
+    color = "Sex"
+  ) +
+  theme_minimal()
+```
+
+
+# Problem 3
+
+```{r}
+file_path = "data/citibike/"
+
+file_name = 
+  list.files(file_path, 
+             pattern = "\\.csv$", 
+             full.names = TRUE)
+
+read_and_label =
+  function(file) {
+  data = read.csv(file)
+  
+  file_info = strsplit(basename(file), " ")[[1]]
+  month = file_info[1]
+  year = file_info[2]
+  
+  data = 
+    data |> 
+    mutate(year = year,
+           month = month)
+  
+  return(data)
+  }
+
+data_q3_df =
+  lapply(file_name, read_and_label) |> 
+  bind_rows() |> 
+  mutate(rideable_type = factor(rideable_type),
+         member_casual = factor(member_casual))
+```
+
+
+```{r}
+data3_summary =
+  data_q3_df |> 
+  group_by(year, month, member_casual) |> 
+  summarize(total_rides = n()) |> 
+  arrange(year, month, member_casual)
+
+data3_summary |> 
+  knitr::kable(caption = "Total Number of Rides",
+    col.names = c("Year", "Month", "Rider Type", "Total Rides"),
+    format = "html")
+```
+
+```{r}
+data_q3_df |> 
+  filter(year == "2024" & month == "July") |> 
+  group_by(start_station_name) |> 
+  summarize(total_rides = n())  |> 
+  arrange(desc(total_rides)) |> 
+  slice(1:5)  |> 
+  knitr::kable(
+    caption = "Top 5 Most Popular Starting Stations in July 2024",
+    col.names = c("Station Name", "Number of Rides"),
+    format = "html",
+    align = c("l", "c"))
+```
+
+
+```{r}
+median_q3_df = 
+  data_q3_df |> 
+  group_by(year, month, weekdays) |> 
+  summarize(median_duration = median(duration))
+
+
+ggplot(median_q3_df, 
+       aes(x = weekdays, y = median_duration, fill = weekdays)) +
+  geom_bar(stat = "identity", 
+           position = "dodge", 
+           alpha = 0.8) +
+  facet_grid(year ~ month) +
+  labs(
+    title = "Effects of Day of the Week, Month, and Year on Median Ride Duration",
+    x = "Day of the Week",
+    y = "Median Ride Duration (minutes)",
+    fill = "Day of Week"
+  ) +
+  theme_minimal()
+```
+
+```{r}
+data_q3_2024 = 
+  data_q3_df |> 
+  filter(year == "2024")
+
+ggplot(data_q3_2024, 
+       aes(x = month, 
+           y = duration, 
+           fill = rideable_type)) +
+  geom_boxplot(alpha = 0.6) + 
+  facet_grid(member_casual ~ rideable_type) + 
+  labs(
+    title = "Impact of Different Features on Ride Duration (2024)",
+    x = "Month",
+    y = "Ride Duration (minutes, log scale)",
+    fill = "Bike Type"
+  ) +
+  theme_minimal()
+```
+
