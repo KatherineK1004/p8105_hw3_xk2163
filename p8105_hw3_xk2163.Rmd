@@ -26,7 +26,18 @@ data_q2_1_df =
 
 ```{r}
 data_q2_2_df = 
-  read_csv("data/nhanes_covar.csv",skip = 4)
+  read_csv("data/nhanes_covar.csv",skip = 4) |> 
+  mutate(
+    sex = factor(case_match(sex,
+                     1 ~ "male",
+                     2 ~ "female")),
+    education = factor(case_match(education,
+                           1~"Less_than_high_school",
+                           2~"High_school_equivalent",
+                           3~ "More_than_high_school"))
+    ) |> 
+  filter(age>=21) |> 
+  drop_na()
 ```
 
 
